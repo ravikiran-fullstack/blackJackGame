@@ -1,0 +1,95 @@
+.gameHomeContainer {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  justify-content: space-evenly;
+  align-items: center;
+}
+
+.gameFinanceContainer {
+  width: 20vw;
+  height: 90vh;
+  border: 1px solid var(--bg3);
+    border-radius: var(--borderRadius);
+}
+
+.gameContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  width: 600px;
+  height: 500px;
+  border: 1px dotted gold;
+  padding: 10px;
+  background-color: white;
+  color: var(--black);
+  border-radius: var(--borderRadius);
+}
+
+.gameHeader {
+  display: flex;
+  flex-direction: column;
+  border: 1px dotted silver;
+  padding: 10px;
+  background-color: var(--bg1);
+  border-radius: var(--borderRadius);
+}
+
+.gameBody {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px dotted silver;
+  width: 100%;
+  height: 50%;
+  padding: 10px;
+  background-color: var(--bg3);
+  border-radius: var(--borderRadius);
+}
+
+.gameControlsContainer {
+  border: 1px dotted silver;
+  height: 100px;
+  width: 100%;
+  padding: 10px;
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  background-color: var(--bg2);
+  border-radius: var(--borderRadius);
+}
+
+.btn {
+  background-color: rgb(223, 190, 47);
+  padding: 5px;
+  height: 40px;
+  width: 60px;
+}
+
+.btn:hover {
+  border: 2px solid white;
+  /* padding: 8px; */
+}
+
+.gameResultsContainer {
+  width: 100%;
+  height: 200px;
+  border: 1px dotted silver;
+  display: flex;
+  flex-direction: column;
+  justify-items: center;
+  align-items: center;
+  background-color: var(--bg3);
+  border-radius: var(--borderRadius);
+}
+
+.gameStatsContainer {
+  width: 20vw;
+  height: 90vh;
+  border: 1px solid var(--bg3);
+  border-radius: var(--borderRadius);
+}

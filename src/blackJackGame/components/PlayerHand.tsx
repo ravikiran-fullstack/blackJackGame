@@ -1,0 +1,24 @@
+import "./handStyles.css";
+
+type PlayerHandType = {
+  cards: number[];
+};
+
+const PlayerHand = ({ cards }: PlayerHandType) => {
+  console.log("PlayerHand ", cards);
+
+  return (
+    <div>
+      <div>
+        <h3>Player</h3>{" "}
+      </div>
+      <div style={{ display: "flex", gap: "10px" }}>
+        {cards.map((card, index) => (
+          <p key={index}>{card}</p>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default PlayerHand;
