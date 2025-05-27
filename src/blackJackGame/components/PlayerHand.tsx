@@ -5,7 +5,7 @@ type PlayerHandType = {
 };
 
 const PlayerHand = ({ cards }: PlayerHandType) => {
-  console.log("PlayerHand ", cards);
+  // console.log("PlayerHand ", cards);
 
   return (
     <div>

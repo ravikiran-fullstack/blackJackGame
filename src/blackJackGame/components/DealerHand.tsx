@@ -5,7 +5,7 @@ type DealerHandType = {
 };
 
 const DealerHand = ({ cards }: DealerHandType) => {
-  console.log(cards);
+  // console.log(cards);
   //   const [playerCards, setPlayerCards] = useState(cards);
   return (
     <div>
