@@ -9,9 +9,9 @@ const GameHome = () => {
   return (
     <GameContextProvider>
       <div className="gameHomeContainer">
-        <GameFinances/>
+        <GameFinances />
         <BlackJackGame />
-        <GameStatus/>
+        <GameStatus />
       </div>
     </GameContextProvider>
   );
