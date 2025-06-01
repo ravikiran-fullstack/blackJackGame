@@ -1,16 +1,53 @@
-.gameHomeContainer {
+/* .gameHomeContainer {
   display: flex;
   width: 100vw;
   height: 100vh;
   justify-content: space-evenly;
   align-items: center;
+} */
+
+.gameHomeContainer {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
-.gameFinanceContainer {
+/* .gameFinanceContainer {
   width: 20vw;
   height: 90vh;
   border: 1px solid var(--bg3);
     border-radius: var(--borderRadius);
+} */
+
+.gameFinanceContainer {
+  width: 22vw;
+  min-width: 240px;
+  max-width: 340px;
+  height: 90vh;
+  border: 1.5px solid var(--bg3);
+  border-radius: var(--borderRadius);
+  background: linear-gradient(135deg, var(--bg2) 80%, var(--bg3) 100%);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  /* padding: 18px 20px; */
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.gameFinanceContainer .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  font-weight: 600;
+  font-size: 1.1rem;
+  background-color: var(--bg1);
+  border-bottom: 1px solid var(--bg3);
+  color: var(--black);
 }
 
 .gameContainer {
@@ -18,23 +55,29 @@
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  gap: 10px;
+  gap: 0px;
   width: 600px;
-  height: 500px;
-  border: 1px dotted gold;
-  padding: 10px;
-  background-color: white;
+  max-width: 95vw;
+  height: 520px;
+  border: 2px solid gold;
+  padding: 10px 18px;
+  background: rgba(255, 255, 255, 0.95);
   color: var(--black);
   border-radius: var(--borderRadius);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
 }
 
 .gameHeader {
   display: flex;
   flex-direction: column;
-  border: 1px dotted silver;
-  padding: 10px;
+  border: 1.5px solid silver;
+  padding: 14px 18px;
   background-color: var(--bg1);
   border-radius: var(--borderRadius);
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
 }
 
 .gameBody {
@@ -43,53 +86,170 @@
   justify-content: space-around;
   align-items: flex-start;
   gap: 10px;
-  border: 1px dotted silver;
+  border: 1.5px solid silver;
   width: 100%;
-  height: 50%;
-  padding: 10px;
+  height: 48%;
+  padding: 14px;
   background-color: var(--bg3);
   border-radius: var(--borderRadius);
 }
 
 .gameControlsContainer {
-  border: 1px dotted silver;
-  height: 100px;
+  border: 1.5px solid silver;
+  height: 90px;
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   display: flex;
   justify-content: space-evenly;
   align-items: center;
   background-color: var(--bg2);
   border-radius: var(--borderRadius);
+  gap: 18px;
 }
 
 .btn {
-  background-color: rgb(223, 190, 47);
-  padding: 5px;
+  background: linear-gradient(90deg, rgb(223, 190, 47) 60%, gold 100%);
+  padding: 0 18px;
   height: 40px;
-  width: 60px;
+  min-width: 70px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #222;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(223, 190, 47, 0.08);
+  transition: border 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
-.btn:hover {
+.btn:hover,
+.btn:focus {
   border: 2px solid white;
-  /* padding: 8px; */
+  background: linear-gradient(90deg, gold 60%, rgb(223, 190, 47) 100%);
+  box-shadow: 0 4px 16px rgba(223, 190, 47, 0.18);
+  outline: none;
 }
 
 .gameResultsContainer {
   width: 100%;
-  height: 200px;
-  border: 1px dotted silver;
+  height: 180px;
+  border: 1.5px solid silver;
   display: flex;
+  padding: 10px 10px;
   flex-direction: column;
-  justify-items: center;
+  justify-content: center;
   align-items: center;
   background-color: var(--bg3);
   border-radius: var(--borderRadius);
+  margin-top: 8px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.gameStatsContainer {
+/* .gameStatsContainer {
   width: 20vw;
   height: 90vh;
   border: 1px solid var(--bg3);
   border-radius: var(--borderRadius);
+  text-align: left;
+  background-color: var(--bg2);
+  color: var(--black);
+}
+
+.gameStatsContainer  .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+}
+
+.gameStatsContainer .body {
+  padding: 10px;
+}
+
+.gameStatsContainer .body > div{
+  padding: 10px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+} */
+
+.gameStatsContainer {
+  width: 24vw;
+  min-width: 260px;
+  max-width: 380px;
+  height: 90vh;
+  border: 1.5px solid var(--bg3);
+  border-radius: var(--borderRadius);
+  text-align: left;
+  background: linear-gradient(135deg, var(--bg2) 75%, var(--bg3) 100%);
+  color: var(--black);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+.gameStatsContainer .header {
+   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  font-weight: 700;
+  font-size: 1.15rem;
+  background: rgba(255,255,255,0.85);
+  border-bottom: 1.5px solid var(--bg3);
+  letter-spacing: 0.5px;
+}
+.gameStatsContainer .body {
+  flex: 1;
+  padding: 18px 24px;
+  overflow-y: auto;
+  background: transparent;
+}
+
+.gameStatsContainer .body > div {
+  padding: 12px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed var(--bg3);
+  font-size: 1.05rem;
+  transition: background 0.2s;
+}
+
+.gameStatsContainer .body > div:last-child {
+  border-bottom: none;
+}
+
+.gameStatsContainer .body > div:hover {
+  background: rgba(255, 255, 255, 0.13);
+  cursor: pointer;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .gameHomeContainer {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 18px 0;
+    gap: 18px;
+  }
+  .gameFinanceContainer,
+  .gameStatsContainer {
+    width: 90vw;
+    min-width: unset;
+    max-width: unset;
+    height: auto;
+    margin-bottom: 18px;
+  }
+  .gameContainer {
+    width: 98vw;
+    max-width: unset;
+    height: auto;
+    min-height: 400px;
+  }
 }
