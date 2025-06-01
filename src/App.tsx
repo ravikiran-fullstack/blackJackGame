@@ -1,5 +1,5 @@
 import "./App.css";
-import BlackJackGame from "./blackJackGame/BlackJackGame";
+import GameHome from "./blackJackGame/GameHome";
 // import HookUseCallback from "./hooks/HookUseCallback";
 // import HookUseMemo from "./hooks/HookUseMemo";
 // import HookUseLayoutEffect from "./hooks/HookUseLayoutEffect";
@@ -18,7 +18,7 @@ function App() {
     //   <CounterApp />
     // </CounterContextProvider>
 
-    <BlackJackGame/>
+    <GameHome/>
   );
 }
 
