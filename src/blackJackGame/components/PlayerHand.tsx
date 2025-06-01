@@ -1,3 +1,4 @@
+import Card from "./Card";
 import "./handStyles.css";
 
 type PlayerHandType = {
@@ -14,7 +15,7 @@ const PlayerHand = ({ cards }: PlayerHandType) => {
       </div>
       <div style={{ display: "flex", gap: "10px" }}>
         {cards.map((card, index) => (
-          <p key={index}>{card}</p>
+          <Card key={index} cardNumber={card} />
         ))}
       </div>
     </div>

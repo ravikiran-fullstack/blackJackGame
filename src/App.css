@@ -3,6 +3,22 @@
   margin: 0 auto;
   /* padding: 2rem; */
   text-align: center;
+  position: relative;
+}
+
+#root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("./assets/background_desktop.png") center/cover no-repeat;
+  opacity: 0.5;
+  z-index: 0;
+  pointer-events: none;
+}
+
+#root > * {
+  position: relative;
+  z-index: 1;
 }
 
 .logo {

@@ -1,3 +1,4 @@
+import Card from "./Card";
 import "./handStyles.css";
 
 type DealerHandType = {
@@ -14,7 +15,11 @@ const DealerHand = ({ cards }: DealerHandType) => {
       </div>
       <div style={{ display: "flex", gap: "10px" }}>
         {cards.map((card, index) => (
-          <p key={index}>{card}</p>
+          <Card
+            key={index}
+            cardNumber={card}
+            showHiddenCardFace={index === 0 ? false : true}
+          />
         ))}
       </div>
     </div>

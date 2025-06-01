@@ -1,0 +1,75 @@
+.cardContainer {
+  height: 70px;
+  width: 50px;
+  /* border: 1px solid black; */
+  background-color: white;
+  position: relative;
+  display: flex;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.cardNumber1 {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 10px;
+  height: 90px;
+  font-size: 12px;
+}
+
+.cardBody {
+  position: absolute;
+  border: 1px solid black;
+  left: 15px;
+  top: 10px;
+  width: 22px;
+  height: 50px;
+  font-size: 10px;
+}
+
+.cardNumber2 {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 10px;
+  font-size: 12px;
+}
+
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.flip-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flip-card-front,
+.flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+}
+
+.flip-card-back {
+  background: #222;
+  color: #fff;
+  transform: rotateY(180deg);
+  background: url("./../../assets/hiddenCard.png") center/cover no-repeat;
+  /* your existing styles */
+}
+
+.flip-card-front {
+  background: #fff;
+  color: #222;
+  /* your existing styles */
+}

@@ -50,7 +50,7 @@ class Dealer {
   constructor(card1: number, card2: number) {
     // console.log('dealer card1',card1);
     
-    this.cards = [card1];
+    this.cards = [card1, card2];
     this.hiddenCard = card2;
   }
 
@@ -95,7 +95,7 @@ class Game {
     }
 
     const dealerCard1 = this.drawACard();
-    const dealerCard2 = 0;
+    const dealerCard2 = this.drawACard();
 
     this.dealerTotal = dealerCard1;
 
