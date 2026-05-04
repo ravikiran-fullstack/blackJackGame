@@ -1,0 +1,29 @@
+# Pull and print Allow Microsoft 3rd Party UEFI CA status
+
+try {
+    $allBiosSettings = Get-WmiObject -Namespace root\wmi `
+        -Class Lenovo_BiosSetting `
+        -ErrorAction Stop |
+        Select-Object -ExpandProperty CurrentSetting
+
+    $thirdPartySetting = $allBiosSettings | Where-Object {
+        $_ -match "3rd|Third|Microsoft.*UEFI.*CA|Allow.*UEFI.*CA|AllowMicrosoft3rdPartyUEFI"
+    } | Select-Object -First 1
+
+    if ($null -eq $thirdPartySetting) {
+        Write-Output "Allow Microsoft 3rd Party UEFI CA: NOT FOUND in BIOS settings"
+    } else {
+        Write-Output "Raw Value : $thirdPartySetting"
+
+        if ($thirdPartySetting -match "Enable|Enabled|On") {
+            Write-Output "Status    : ENABLED"
+        } elseif ($thirdPartySetting -match "Disable|Disabled|Off") {
+            Write-Output "Status    : DISABLED"
+        } else {
+            Write-Output "Status    : UNKNOWN"
+        }
+    }
+}
+catch {
+    Write-Error "Failed to query BIOS: $($_.Exception.Message)"
+}
