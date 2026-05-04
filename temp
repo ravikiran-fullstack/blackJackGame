@@ -1,10 +1,7 @@
 # Pull and print Allow Microsoft 3rd Party UEFI CA status
 
 try {
-    $allBiosSettings = Get-WmiObject -Namespace root\wmi `
-        -Class Lenovo_BiosSetting `
-        -ErrorAction Stop |
-        Select-Object -ExpandProperty CurrentSetting
+    $allBiosSettings = Get-WmiObject -Namespace root\wmi -Class Lenovo_BiosSetting -ErrorAction Stop | Select-Object -ExpandProperty CurrentSetting
 
     $thirdPartySetting = $allBiosSettings | Where-Object {
         $_ -match "3rd|Third|Microsoft.*UEFI.*CA|Allow.*UEFI.*CA|AllowMicrosoft3rdPartyUEFI"
