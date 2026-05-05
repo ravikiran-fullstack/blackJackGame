@@ -1,0 +1,60 @@
+# Run this directly on an affected device as Administrator
+# This will tell us the exact state of everything
+
+Write-Host "===== SECURE BOOT DIAGNOSTICS =====" -ForegroundColor Cyan
+
+# 1. OS-level Secure Boot confirmation
+Write-Host "`n--- OS Level ---" -ForegroundColor Yellow
+try {
+    $sb = Confirm-SecureBootUEFI
+    Write-Host "Confirm-SecureBootUEFI : $sb"
+} catch {
+    Write-Host "Confirm-SecureBootUEFI ERROR: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+# 2. Registry check
+Write-Host "`n--- Registry ---" -ForegroundColor Yellow
+$regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State"
+if (Test-Path $regPath) {
+    $regVal = Get-ItemProperty $regPath
+    Write-Host "UEFISecureBootEnabled : $($regVal.UEFISecureBootEnabled)"
+} else {
+    Write-Host "Registry path not found: $regPath" -ForegroundColor Red
+}
+
+# 3. PowerShell bitness
+Write-Host "`n--- PowerShell Environment ---" -ForegroundColor Yellow
+Write-Host "PS Architecture : $([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
+Write-Host "PS Version      : $($PSVersionTable.PSVersion)"
+Write-Host "Is 64-bit PS    : $([Environment]::Is64BitProcess)"
+Write-Host "Is 64-bit OS    : $([Environment]::Is64BitOperatingSystem)"
+
+# 4. All Lenovo WMI Secure Boot related settings - RAW dump
+Write-Host "`n--- Lenovo WMI Raw BIOS Settings (Secure/Boot/UEFI/Key) ---" -ForegroundColor Yellow
+try {
+    $all = Get-WmiObject -Namespace root\wmi -Class Lenovo_BiosSetting | Select-Object -ExpandProperty CurrentSetting
+    $filtered = $all | Where-Object { $_ -match "Secure|Boot|UEFI|Key|3rd|Third|CA" }
+    $filtered | ForEach-Object { Write-Host "  $_" }
+} catch {
+    Write-Host "WMI query failed: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+# 5. Firmware type
+Write-Host "`n--- Firmware ---" -ForegroundColor Yellow
+$fw = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
+Write-Host "Firmware Type : $fw"
+
+# 6. msinfo32 style check
+Write-Host "`n--- CIM Secure Boot ---" -ForegroundColor Yellow
+try {
+    $uefi = Get-CimInstance -ClassName Win32_OperatingSystem
+    Write-Host "OS Version : $($uefi.Version)"
+    $sb2 = Get-CimInstance -Namespace root\microsoft\windows\deviceguard -ClassName Win32_DeviceGuard -ErrorAction Stop
+    Write-Host "SecureBootCapable         : $($sb2.SecureBootCapable)"
+    Write-Host "SecurityServicesRunning   : $($sb2.SecurityServicesRunning)"
+    Write-Host "SecurityServicesConfigured: $($sb2.SecurityServicesConfigured)"
+} catch {
+    Write-Host "DeviceGuard CIM failed: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+Write-Host "`n===== END DIAGNOSTICS =====" -ForegroundColor Cyan
