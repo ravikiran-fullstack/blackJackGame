@@ -1,0 +1,43 @@
+#Requires -RunAsAdministrator
+try {
+    # Check Secure Boot status via Windows API first
+    $secureBoot = Confirm-SecureBootUEFI -ErrorAction SilentlyContinue
+
+    if ($secureBoot -eq $true) {
+        Write-Host "Secure Boot is enabled. No issues detected."
+        exit 0  # Compliant - no remediation needed
+    }
+
+    # If not confirmed via API, check via Lenovo WMI
+    $allBiosSettings = Get-WmiObject -Namespace root\wmi -Class Lenovo_BiosSetting -ErrorAction Stop | Select-Object -ExpandProperty CurrentSetting
+
+    $secureBootSetting = $allBiosSettings | Where-Object {
+        $_ -match "^SecureBoot,"
+    } | Select-Object -First 1
+
+    $thirdPartySetting = $allBiosSettings | Where-Object {
+        $_ -match "3rd|Third|Microsoft.*UEFI.*CA|Allow.*UEFI.*CA|AllowMicrosoft3rdPartyUEFI"
+    } | Select-Object -First 1
+
+    $issues = @()
+
+    if ($secureBootSetting -match "SecureBoot,Disable") {
+        $issues += "Secure Boot is disabled"
+    }
+
+    if ($thirdPartySetting -match "Disable|Disabled|Off") {
+        $issues += "Microsoft 3rd Party UEFI CA is disabled"
+    }
+
+    if ($issues.Count -gt 0) {
+        Write-Host "Issues found: $($issues -join '; ')"
+        exit 1  # Non-compliant - trigger remediation
+    }
+
+    Write-Host "Device is compliant."
+    exit 0  # Compliant
+
+} catch {
+    Write-Host "Detection error: $($_.Exception.Message)"
+    exit 1  # Treat errors as non-compliant
+}
