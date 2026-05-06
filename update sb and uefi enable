@@ -1,0 +1,271 @@
+# Lenovo Remediation - Enable Allow Microsoft 3rd Party UEFI CA + Secure Boot
+# Saves logs/output to C:\Windows\Temp
+
+#Requires -RunAsAdministrator
+$ErrorActionPreference = "Stop"
+
+$OutputFolder = "C:\Windows\Temp"
+$LogPath = Join-Path $OutputFolder "SecureBoot_Remediation.log"
+$BiosDumpPath = Join-Path $OutputFolder "LenovoBIOSSettings.txt"
+
+$RegPath = "HKLM:\SOFTWARE\Company\SecureBoot"
+$PendingName = "PendingReboot"
+
+function Write-Log {
+    param([string]$Message)
+
+    $Line = "[SecureBootRemediation] $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    Write-Output $Line
+    Add-Content -Path $LogPath -Value $Line
+}
+
+function Get-ResultText {
+    param($Result)
+
+    if ($null -eq $Result) { return "No result returned" }
+    if ($Result.PSObject.Properties.Name -contains "return") { return [string]$Result.return }
+    if ($Result.PSObject.Properties.Name -contains "Return") { return [string]$Result.Return }
+
+    return ($Result | Out-String).Trim()
+}
+
+function Get-LenovoBiosSettings {
+    Get-WmiObject -Namespace root\wmi -Class Lenovo_BiosSetting -ErrorAction Stop |
+        Select-Object -ExpandProperty CurrentSetting
+}
+
+function Get-LenovoBiosSelections {
+    param([string]$SettingName)
+
+    try {
+        $Selector = Get-WmiObject -Namespace root\wmi -Class Lenovo_GetBiosSelections -ErrorAction Stop
+        $Result = $Selector.GetBiosSelections($SettingName)
+        $Text = Get-ResultText $Result
+
+        Write-Log "Available selections for $SettingName : $Text"
+        return $Text
+    }
+    catch {
+        Write-Log "Unable to get BIOS selections for $SettingName : $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Set-LenovoBiosSettingRaw {
+    param(
+        [string]$SettingName,
+        [string]$Value
+    )
+
+    $Setter = Get-WmiObject -Namespace root\wmi -Class Lenovo_SetBiosSetting -ErrorAction Stop
+    return $Setter.SetBiosSetting("$SettingName,$Value")
+}
+
+function Set-LenovoBiosSettingSmart {
+    param(
+        [string]$SettingName,
+        [string[]]$PreferredValues
+    )
+
+    $Selections = Get-LenovoBiosSelections -SettingName $SettingName
+    $ValuesToTry = New-Object System.Collections.Generic.List[string]
+
+    foreach ($Value in $PreferredValues) {
+        if ($Selections -and $Selections -match "(^|,|\s)$([regex]::Escape($Value))($|,|\s)") {
+            $ValuesToTry.Add($Value)
+        }
+    }
+
+    foreach ($Value in $PreferredValues) {
+        if (-not $ValuesToTry.Contains($Value)) {
+            $ValuesToTry.Add($Value)
+        }
+    }
+
+    foreach ($Value in $ValuesToTry) {
+        Write-Log "Trying to set $SettingName to $Value"
+
+        $Result = Set-LenovoBiosSettingRaw -SettingName $SettingName -Value $Value
+        $ResultText = Get-ResultText $Result
+
+        Write-Log "Result for $SettingName,$Value : $ResultText"
+
+        if ($ResultText -match "Success") {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Save-LenovoBiosSettings {
+    $Saver = Get-WmiObject -Namespace root\wmi -Class Lenovo_SaveBiosSettings -ErrorAction Stop
+    return $Saver.SaveBiosSettings()
+}
+
+function Set-PendingRebootFlag {
+    if (!(Test-Path $RegPath)) {
+        New-Item -Path $RegPath -Force | Out-Null
+    }
+
+    New-ItemProperty `
+        -Path $RegPath `
+        -Name $PendingName `
+        -Value 1 `
+        -PropertyType DWORD `
+        -Force | Out-Null
+
+    Write-Log "Pending reboot registry flag created at $RegPath\$PendingName"
+}
+
+function Show-RestartPrompt {
+    Add-Type -AssemblyName PresentationFramework
+
+    $Message = "Secure Boot BIOS changes have been applied.`n`nPlease restart your device to complete the changes.`n`nClick Yes to restart now.`nClick No to restart later."
+
+    $Result = [System.Windows.MessageBox]::Show(
+        $Message,
+        "Secure Boot Changes Applied",
+        "YesNo",
+        "Information"
+    )
+
+    if ($Result -eq "Yes") {
+        Write-Log "User selected Restart Now."
+        Restart-Computer -Force
+    }
+    else {
+        Write-Log "User deferred restart."
+    }
+}
+
+try {
+    if (!(Test-Path $OutputFolder)) {
+        New-Item -Path $OutputFolder -ItemType Directory -Force | Out-Null
+    }
+
+    if (Test-Path $LogPath) {
+        Remove-Item $LogPath -Force -ErrorAction SilentlyContinue
+    }
+
+    New-Item -Path $LogPath -ItemType File -Force | Out-Null
+
+    Write-Log "Starting Lenovo Secure Boot remediation."
+    Write-Log "Log path: $LogPath"
+    Write-Log "BIOS dump path: $BiosDumpPath"
+
+    $ComputerSystem = Get-CimInstance Win32_ComputerSystem
+    Write-Log "Manufacturer: $($ComputerSystem.Manufacturer)"
+    Write-Log "Model: $($ComputerSystem.Model)"
+
+    if ($ComputerSystem.Manufacturer -notmatch "Lenovo") {
+        throw "This script is intended only for Lenovo devices."
+    }
+
+    $BiosMode = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
+    Write-Log "BIOS firmware type: $BiosMode"
+
+    if ($BiosMode -ne "UEFI") {
+        throw "Device is not running in UEFI mode. Secure Boot cannot be enabled."
+    }
+
+    $AllSettings = Get-LenovoBiosSettings
+    $AllSettings | Out-File $BiosDumpPath -Force
+
+    Write-Log "Full Lenovo BIOS settings exported to $BiosDumpPath"
+
+    $ChangesMade = $false
+
+    $ThirdPartySetting = $AllSettings | Where-Object {
+        $_ -match "Allow3rdPartyUEFICA|Allow.*Microsoft.*3rd.*Party.*UEFI.*CA|3rd.*Party.*UEFI.*CA"
+    } | Select-Object -First 1
+
+    Write-Log "3rd Party UEFI CA raw value: $ThirdPartySetting"
+
+    if ($null -eq $ThirdPartySetting) {
+        throw "Allow Microsoft 3rd Party UEFI CA setting not found."
+    }
+
+    $ThirdPartySettingName = ($ThirdPartySetting -split ',')[0].Trim()
+    Write-Log "Detected 3rd Party UEFI CA setting name: $ThirdPartySettingName"
+
+    if ($ThirdPartySetting -match "Disable|Disabled|Off") {
+        Write-Log "3rd Party UEFI CA is Off/Disabled. Enabling it now."
+
+        $ThirdPartySuccess = Set-LenovoBiosSettingSmart `
+            -SettingName $ThirdPartySettingName `
+            -PreferredValues @("On", "Enable", "Enabled")
+
+        if (-not $ThirdPartySuccess) {
+            throw "Failed to enable $ThirdPartySettingName. Check log: $LogPath"
+        }
+
+        $ChangesMade = $true
+    }
+    else {
+        Write-Log "3rd Party UEFI CA is already enabled/on."
+    }
+
+    $AllSettings = Get-LenovoBiosSettings
+    $AllSettings | Out-File $BiosDumpPath -Force
+    Write-Log "BIOS settings refreshed and exported again to $BiosDumpPath"
+
+    $SecureBootSetting = $AllSettings | Where-Object {
+        $_ -match "^SecureBoot,|^Secure Boot,"
+    } | Select-Object -First 1
+
+    Write-Log "Secure Boot raw value: $SecureBootSetting"
+
+    if ($null -eq $SecureBootSetting) {
+        throw "Secure Boot setting not found."
+    }
+
+    $SecureBootSettingName = ($SecureBootSetting -split ',')[0].Trim()
+    Write-Log "Detected Secure Boot setting name: $SecureBootSettingName"
+
+    if ($SecureBootSetting -match "Disable|Disabled|Off") {
+        Write-Log "Secure Boot is Off/Disabled. Enabling it now."
+
+        $SecureBootSuccess = Set-LenovoBiosSettingSmart `
+            -SettingName $SecureBootSettingName `
+            -PreferredValues @("On", "Enable", "Enabled")
+
+        if (-not $SecureBootSuccess) {
+            throw "Failed to enable $SecureBootSettingName. Check log: $LogPath"
+        }
+
+        $ChangesMade = $true
+    }
+    else {
+        Write-Log "Secure Boot is already enabled/on."
+    }
+
+    if ($ChangesMade) {
+        Write-Log "Saving Lenovo BIOS settings."
+
+        $SaveResult = Save-LenovoBiosSettings
+        $SaveText = Get-ResultText $SaveResult
+
+        Write-Log "Save BIOS result: $SaveText"
+
+        if ($SaveText -notmatch "Success") {
+            throw "Failed to save Lenovo BIOS settings."
+        }
+
+        Write-Log "BIOS settings saved successfully. Reboot required."
+
+        Set-PendingRebootFlag
+        Show-RestartPrompt
+    }
+    else {
+        Write-Log "No BIOS changes required."
+    }
+
+    Write-Log "Remediation completed successfully."
+    exit 0
+}
+catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    Write-Log "Remediation failed."
+    exit 1
+}
