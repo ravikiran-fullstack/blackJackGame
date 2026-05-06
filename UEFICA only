@@ -1,0 +1,174 @@
+# Lenovo Remediation - Enable Allow Microsoft 3rd Party UEFI CA Only
+
+#Requires -RunAsAdministrator
+$ErrorActionPreference = "Stop"
+
+$LogPath = Join-Path $env:TEMP "UEFCA_Remediation.log"
+
+function Write-Log {
+    param([string]$Message)
+    $Line = "[UEFICARemediation] $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    Write-Output $Line
+    Add-Content -Path $LogPath -Value $Line
+}
+
+function Get-ResultText {
+    param($Result)
+    if ($null -eq $Result) { return "No result returned" }
+    if ($Result.PSObject.Properties.Name -contains "return") { return [string]$Result.return }
+    if ($Result.PSObject.Properties.Name -contains "Return") { return [string]$Result.Return }
+    return ($Result | Out-String).Trim()
+}
+
+function Get-LenovoBiosSettings {
+    Get-WmiObject -Namespace root\wmi -Class Lenovo_BiosSetting -ErrorAction Stop |
+        Select-Object -ExpandProperty CurrentSetting
+}
+
+function Get-LenovoBiosSelections {
+    param([string]$SettingName)
+    try {
+        $Selector = Get-WmiObject -Namespace root\wmi -Class Lenovo_GetBiosSelections -ErrorAction Stop
+        $Result   = $Selector.GetBiosSelections($SettingName)
+        $Text     = Get-ResultText $Result
+        Write-Log "Available selections for $SettingName : $Text"
+        return $Text
+    } catch {
+        Write-Log "Unable to get BIOS selections for $SettingName : $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Set-LenovoBiosSettingRaw {
+    param([string]$SettingName, [string]$Value)
+    $Setter = Get-WmiObject -Namespace root\wmi -Class Lenovo_SetBiosSetting -ErrorAction Stop
+    return $Setter.SetBiosSetting("$SettingName,$Value")
+}
+
+function Set-LenovoBiosSettingSmart {
+    param([string]$SettingName, [string[]]$PreferredValues)
+
+    $Selections  = Get-LenovoBiosSelections -SettingName $SettingName
+    $ValuesToTry = New-Object System.Collections.Generic.List[string]
+
+    foreach ($Value in $PreferredValues) {
+        if ($Selections -and $Selections -match "(^|,|\s)$([regex]::Escape($Value))($|,|\s)") {
+            $ValuesToTry.Add($Value)
+        }
+    }
+    foreach ($Value in $PreferredValues) {
+        if (-not $ValuesToTry.Contains($Value)) { $ValuesToTry.Add($Value) }
+    }
+
+    foreach ($Value in $ValuesToTry) {
+        Write-Log "Trying to set $SettingName to $Value"
+        $Result     = Set-LenovoBiosSettingRaw -SettingName $SettingName -Value $Value
+        $ResultText = Get-ResultText $Result
+        Write-Log "Result for $SettingName,$Value : $ResultText"
+        if ($ResultText -match "Success") { return $true }
+    }
+
+    return $false
+}
+
+function Save-LenovoBiosSettings {
+    $Saver = Get-WmiObject -Namespace root\wmi -Class Lenovo_SaveBiosSettings -ErrorAction Stop
+    return $Saver.SaveBiosSettings()
+}
+
+function Show-RestartPrompt {
+    Add-Type -AssemblyName PresentationFramework
+    $Result = [System.Windows.MessageBox]::Show(
+        "Allow Microsoft 3rd Party UEFI CA has been enabled.`n`nA restart is required to apply the change.`n`nWould you like to restart now?",
+        "UEFI CA Change Applied",
+        "YesNo",
+        "Information"
+    )
+    if ($Result -eq "Yes") {
+        Write-Log "User selected Restart Now."
+        Restart-Computer -Force
+    } else {
+        Write-Log "User deferred restart."
+    }
+}
+
+# ==============================================================================
+# MAIN
+# ==============================================================================
+try {
+    if (Test-Path $LogPath) { Remove-Item $LogPath -Force -ErrorAction SilentlyContinue }
+    New-Item -Path $LogPath -ItemType File -Force | Out-Null
+
+    Write-Log "===== Starting UEFI CA Remediation ====="
+
+    # Verify Lenovo device
+    $CS = Get-CimInstance Win32_ComputerSystem
+    Write-Log "Manufacturer : $($CS.Manufacturer)"
+    Write-Log "Model        : $($CS.Model)"
+    if ($CS.Manufacturer -notmatch "Lenovo") { throw "This script is intended only for Lenovo devices." }
+
+    # Verify UEFI
+    $BiosMode = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
+    Write-Log "Firmware type: $BiosMode"
+    if ($BiosMode -ne "UEFI") { throw "Device is not running in UEFI mode." }
+
+    # Get all BIOS settings
+    $AllSettings = Get-LenovoBiosSettings
+    $AllSettings | Out-File "$env:TEMP\LenovoBIOSSettings.txt" -Force
+
+    # Find 3rd Party UEFI CA setting
+    $ThirdPartySetting = $AllSettings | Where-Object {
+        $_ -match "Allow3rdPartyUEFICA|Allow.*Microsoft.*3rd.*Party.*UEFI.*CA|3rd.*Party.*UEFI.*CA"
+    } | Select-Object -First 1
+
+    Write-Log "3rd Party UEFI CA raw value : $ThirdPartySetting"
+
+    if ($null -eq $ThirdPartySetting) {
+        throw "Allow Microsoft 3rd Party UEFI CA setting not found in BIOS."
+    }
+
+    $SettingName = ($ThirdPartySetting -split ',')[0].Trim()
+    Write-Log "Setting name : $SettingName"
+
+    # Check if already enabled
+    if ($ThirdPartySetting -notmatch "Disable|Disabled|Off") {
+        Write-Log "3rd Party UEFI CA is already enabled. No changes needed."
+        Write-Log "===== UEFI CA Remediation Completed - Already Compliant ====="
+        exit 0
+    }
+
+    # Enable it
+    Write-Log "3rd Party UEFI CA is disabled. Enabling now..."
+
+    $Success = Set-LenovoBiosSettingSmart `
+        -SettingName $SettingName `
+        -PreferredValues @("On", "Enable", "Enabled")
+
+    if (-not $Success) {
+        throw "Failed to enable $SettingName. Check log for available selections."
+    }
+
+    Write-Log "3rd Party UEFI CA enabled successfully."
+
+    # Save BIOS
+    $SaveResult = Save-LenovoBiosSettings
+    $SaveText   = Get-ResultText $SaveResult
+    Write-Log "Save BIOS result: $SaveText"
+
+    if ($SaveText -notmatch "Success") {
+        throw "Failed to save Lenovo BIOS settings."
+    }
+
+    Write-Log "BIOS saved. Reboot required."
+
+    # Prompt user
+    Show-RestartPrompt
+
+    Write-Log "===== UEFI CA Remediation Completed Successfully ====="
+    exit 0
+
+} catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    Write-Log "===== UEFI CA Remediation FAILED ====="
+    exit 1
+}
