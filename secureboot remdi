@@ -1,0 +1,305 @@
+# Remediation Script - Lenovo Secure Boot + Microsoft 3rd Party UEFI CA
+
+#Requires -RunAsAdministrator
+
+param(
+    [string]$BiosAdminPassword = "",
+    [switch]$SuspendBitLockerForNextReboot,
+    [switch]$ForceRestart
+)
+
+$ErrorActionPreference = "Stop"
+
+$LogPath = Join-Path $env:TEMP "SecureBoot.log"
+$RegPath = "HKLM:\SOFTWARE\Company\SecureBoot"
+$PendingName = "PendingReboot"
+
+if (Test-Path $LogPath) {
+    Remove-Item $LogPath -Force -ErrorAction SilentlyContinue
+}
+
+New-Item -Path $LogPath -ItemType File -Force | Out-Null
+
+function Write-Log {
+    param([string]$Message)
+
+    $TimeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $Line = "[SecureBootRemediation] $TimeStamp $Message"
+
+    Write-Host $Line
+    Add-Content -Path $LogPath -Value $Line
+}
+
+function Test-IsAdmin {
+    $Id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $P = New-Object Security.Principal.WindowsPrincipal($Id)
+    return $P.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-LenovoWmiObject {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ClassName
+    )
+
+    Get-WmiObject -Namespace root\wmi -Class $ClassName -ErrorAction Stop
+}
+
+function Get-LenovoBiosSettingValue {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SettingName
+    )
+
+    $Settings = Get-LenovoWmiObject -ClassName "Lenovo_BiosSetting"
+
+    $Match = $Settings | Where-Object {
+        $_.CurrentSetting -match [regex]::Escape($SettingName)
+    } | Select-Object -First 1
+
+    if ($Match) {
+        return $Match.CurrentSetting
+    }
+
+    return $null
+}
+
+function Get-ThirdPartyUEFICAStatus {
+    $AllBiosSettings = Get-LenovoWmiObject -ClassName "Lenovo_BiosSetting" |
+        Select-Object -ExpandProperty CurrentSetting
+
+    $AllBiosSettings | Out-File "$env:TEMP\LenovoBIOSSettings.txt" -Force
+
+    $ThirdPartySetting = $AllBiosSettings | Where-Object {
+        $_ -match "3rd|Third|Microsoft.*UEFI.*CA|Allow.*UEFI.*CA|AllowMicrosoft3rdPartyUEFICA"
+    } | Select-Object -First 1
+
+    if ($null -eq $ThirdPartySetting) {
+        return [PSCustomObject]@{
+            Found   = $false
+            Status  = "Unknown"
+            RawValue = $null
+        }
+    }
+
+    if ($ThirdPartySetting -match "Enable|Enabled|On") {
+        return [PSCustomObject]@{
+            Found   = $true
+            Status  = "Enabled"
+            RawValue = $ThirdPartySetting
+        }
+    }
+
+    if ($ThirdPartySetting -match "Disable|Disabled|Off") {
+        return [PSCustomObject]@{
+            Found   = $true
+            Status  = "Disabled"
+            RawValue = $ThirdPartySetting
+        }
+    }
+
+    return [PSCustomObject]@{
+        Found   = $true
+        Status  = "Unknown"
+        RawValue = $ThirdPartySetting
+    }
+}
+
+function Set-LenovoBiosSetting {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SettingName,
+
+        [Parameter(Mandatory)]
+        [string]$Value
+    )
+
+    $Setter = Get-LenovoWmiObject -ClassName "Lenovo_SetBiosSetting"
+    $Argument = "$SettingName,$Value"
+
+    if ([string]::IsNullOrWhiteSpace($BiosAdminPassword)) {
+        return $Setter.SetBiosSetting($Argument)
+    }
+    else {
+        return $Setter.SetBiosSetting("$Argument,$BiosAdminPassword,ascii,us")
+    }
+}
+
+function Save-LenovoBiosSettings {
+    $Saver = Get-LenovoWmiObject -ClassName "Lenovo_SaveBiosSettings"
+
+    if ([string]::IsNullOrWhiteSpace($BiosAdminPassword)) {
+        return $Saver.SaveBiosSettings()
+    }
+    else {
+        return $Saver.SaveBiosSettings("$BiosAdminPassword,ascii,us")
+    }
+}
+
+function Get-ResultText {
+    param($ResultObject)
+
+    if ($null -eq $ResultObject) {
+        return "No result returned"
+    }
+
+    if ($ResultObject.PSObject.Properties.Name -contains "return") {
+        return [string]$ResultObject.return
+    }
+
+    if ($ResultObject.PSObject.Properties.Name -contains "Return") {
+        return [string]$ResultObject.Return
+    }
+
+    return ($ResultObject | Out-String).Trim()
+}
+
+function Test-ResultSuccess {
+    param($ResultObject)
+
+    $ResultText = Get-ResultText $ResultObject
+    return ($ResultText -match "Success")
+}
+
+function Suspend-SystemBitLockerOnce {
+    try {
+        $OsVolume = Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop
+
+        if ($OsVolume.ProtectionStatus -eq "On") {
+            Suspend-BitLocker -MountPoint $env:SystemDrive -RebootCount 1 | Out-Null
+            Write-Log "BitLocker suspended for 1 reboot on $env:SystemDrive"
+        }
+        else {
+            Write-Log "BitLocker is not enabled or already suspended on $env:SystemDrive"
+        }
+    }
+    catch {
+        Write-Log "BitLocker check skipped or failed: $($_.Exception.Message)"
+    }
+}
+
+function Set-PendingRebootFlag {
+    if (!(Test-Path $RegPath)) {
+        New-Item -Path $RegPath -Force | Out-Null
+    }
+
+    New-ItemProperty `
+        -Path $RegPath `
+        -Name $PendingName `
+        -Value 1 `
+        -PropertyType DWORD `
+        -Force | Out-Null
+
+    Write-Log "Pending reboot registry flag created."
+}
+
+try {
+    Write-Log "Starting Lenovo Secure Boot remediation."
+    Write-Log "Log file path: $LogPath"
+
+    if (-not (Test-IsAdmin)) {
+        throw "Script must run as Administrator or SYSTEM."
+    }
+
+    $Cs = Get-CimInstance Win32_ComputerSystem
+    Write-Log "Manufacturer detected: $($Cs.Manufacturer)"
+    Write-Log "Model detected: $($Cs.Model)"
+
+    if ($Cs.Manufacturer -notmatch "Lenovo") {
+        throw "This script is intended only for Lenovo devices."
+    }
+
+    $BiosMode = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
+    Write-Log "Firmware type detected: $BiosMode"
+
+    if ($BiosMode -ne "UEFI") {
+        throw "Device is not running in UEFI mode. Secure Boot cannot be enabled."
+    }
+
+    if ($SuspendBitLockerForNextReboot) {
+        Suspend-SystemBitLockerOnce
+    }
+
+    $ChangesMade = $false
+
+    # Check Microsoft 3rd Party UEFI CA
+    $ThirdPartyStatus = Get-ThirdPartyUEFICAStatus
+
+    Write-Log "3rd Party UEFI CA Found: $($ThirdPartyStatus.Found)"
+    Write-Log "3rd Party UEFI CA Status: $($ThirdPartyStatus.Status)"
+    Write-Log "3rd Party UEFI CA Raw Value: $($ThirdPartyStatus.RawValue)"
+
+    if ($ThirdPartyStatus.Status -eq "Disabled") {
+        throw "Microsoft 3rd Party UEFI CA is disabled. Aborting to avoid Invalid Signature boot issue."
+    }
+
+    if ($ThirdPartyStatus.Status -eq "Unknown") {
+        throw "Microsoft 3rd Party UEFI CA status is unknown. Aborting Secure Boot remediation."
+    }
+
+    Write-Log "Microsoft 3rd Party UEFI CA is enabled. Safe to continue."
+
+    # Check Secure Boot BIOS setting
+    $SecureBootSettingName = "SecureBoot"
+    $CurrentSecureBoot = Get-LenovoBiosSettingValue -SettingName $SecureBootSettingName
+
+    Write-Log "Current SecureBoot setting: $CurrentSecureBoot"
+
+    if ($null -eq $CurrentSecureBoot) {
+        throw "SecureBoot setting was not found."
+    }
+
+    if ($CurrentSecureBoot -match "Disable|Disabled") {
+        Write-Log "Secure Boot is disabled. Enabling Secure Boot."
+
+        $ResultSecureBoot = Set-LenovoBiosSetting -SettingName $SecureBootSettingName -Value "Enable"
+        Write-Log "Set SecureBoot result: $(Get-ResultText $ResultSecureBoot)"
+
+        if (-not (Test-ResultSuccess $ResultSecureBoot)) {
+            throw "Failed to enable Secure Boot."
+        }
+
+        $ChangesMade = $true
+    }
+    elseif ($CurrentSecureBoot -match "Enable|Enabled") {
+        Write-Log "Secure Boot is already enabled in BIOS."
+    }
+    else {
+        throw "Unable to determine Secure Boot state. Current value: $CurrentSecureBoot"
+    }
+
+    if ($ChangesMade) {
+        Write-Log "Saving Lenovo BIOS settings."
+
+        $SaveResult = Save-LenovoBiosSettings
+        Write-Log "Save BIOS settings result: $(Get-ResultText $SaveResult)"
+
+        if (-not (Test-ResultSuccess $SaveResult)) {
+            throw "Failed to save Lenovo BIOS settings."
+        }
+
+        Write-Log "BIOS settings saved successfully. Reboot is required."
+
+        # Create pending reboot flag so Intune detection does not keep triggering remediation
+        Set-PendingRebootFlag
+    }
+    else {
+        Write-Log "No BIOS changes required."
+    }
+
+    if ($ForceRestart -and $ChangesMade) {
+        Write-Log "ForceRestart specified. Restarting device now."
+        Restart-Computer -Force
+    }
+    else {
+        Write-Log "Restart not forced. Device should be rebooted later if BIOS changes were made."
+    }
+
+    Write-Log "Secure Boot remediation completed successfully."
+    exit 0
+}
+catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    Write-Log "Secure Boot remediation failed."
+    exit 1
+}
