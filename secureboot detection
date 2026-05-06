@@ -1,0 +1,46 @@
+# Detection Script - Secure Boot + Pending Reboot Handling
+
+$RegPath = "HKLM:\SOFTWARE\Company\SecureBoot"
+$PendingName = "PendingReboot"
+
+try {
+    # If remediation already made BIOS changes and reboot is pending,
+    # do not keep triggering remediation repeatedly.
+    if (Test-Path $RegPath) {
+        $Pending = Get-ItemProperty -Path $RegPath -Name $PendingName -ErrorAction SilentlyContinue
+
+        if ($Pending.$PendingName -eq 1) {
+            Write-Output "Pending reboot after Secure Boot remediation. Marking as compliant temporarily."
+            exit 0
+        }
+    }
+
+    # Check if device is UEFI
+    $BiosMode = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
+
+    if ($BiosMode -ne "UEFI") {
+        Write-Output "Device is not running in UEFI mode. Secure Boot cannot be enabled."
+        exit 1
+    }
+
+    # Check Secure Boot active state
+    $SecureBootState = Confirm-SecureBootUEFI
+
+    if ($SecureBootState -eq $true) {
+        # Clean old pending flag if present
+        if (Test-Path $RegPath) {
+            Remove-Item -Path $RegPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+
+        Write-Output "Secure Boot is enabled and active."
+        exit 0
+    }
+    else {
+        Write-Output "Secure Boot is disabled or not active."
+        exit 1
+    }
+}
+catch {
+    Write-Output "Detection failed: $($_.Exception.Message)"
+    exit 1
+}
