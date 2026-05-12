@@ -1,0 +1,53 @@
+# Detection Script - Secure Boot Status
+# Intune logic:
+# Exit 0 = Compliant
+# Exit 1 = Non-compliant, trigger remediation
+
+$ErrorActionPreference = "Stop"
+
+$LogPath = Join-Path $env:TEMP "SecureBoot_Detection.log"
+
+function Write-Log {
+    param([string]$Message)
+
+    $TimeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $Line = "[SecureBootDetection] $TimeStamp $Message"
+
+    Write-Output $Line
+    Add-Content -Path $LogPath -Value $Line
+}
+
+try {
+    Write-Log "Starting Secure Boot detection."
+
+    $BiosMode = (Get-ComputerInfo -Property BiosFirmwareType).BiosFirmwareType
+    Write-Log "Firmware type detected: $BiosMode"
+
+    if ($BiosMode -ne "UEFI") {
+        Write-Log "Device is not running in UEFI mode. Secure Boot cannot be enabled."
+        exit 0
+    }
+
+    try {
+        $SecureBootState = Confirm-SecureBootUEFI
+        Write-Log "Confirm-SecureBootUEFI result: $SecureBootState"
+
+        if ($SecureBootState -eq $true) {
+            Write-Log "Secure Boot is enabled. Device is compliant."
+            exit 0
+        }
+        else {
+            Write-Log "Secure Boot is disabled. Device is non-compliant."
+            exit 1
+        }
+    }
+    catch {
+        Write-Log "Unable to read Secure Boot status: $($_.Exception.Message)"
+        Write-Log "Marking device as non-compliant so remediation can attempt BIOS-level fix."
+        exit 1
+    }
+}
+catch {
+    Write-Log "Detection failed: $($_.Exception.Message)"
+    exit 1
+}
